@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Christmas Card</title>
+
+<!-- pdf-lib -->
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+
+<!-- pdf.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f9;
+    padding: 2rem;
+}
+.container {
+    max-width: 600px;
+    margin: auto;
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.1);
+}
+label {
+    font-weight: bold;
+    display: block;
+    margin-top: 1rem;
+}
+input, select, button {
+    width: 100%;
+    padding: 0.8rem;
+    margin-top: 0.5rem;
+}
+button {
+    background: #007bff;
+    color: white;
+    border: none;
+    margin-top: 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+}
+button:hover {
+    background: #0056b3;
+}
+.font-status {
+    padding: 10px;
+    margin-bottom: 1rem;
+    border-radius: 5px;
+    font-weight: bold;
+}
+.font-success {
+    background: #d4edda;
+    color: #155724;
+}
+.font-error {
+    background: #f8d7da;
+    color: #721c24;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h2>Christmas Card</h2>
+
+<div id="fontStatus" class="font-status">Loading Montserrat font…</div>
+
+<label>Upload PDF Christmas Card</label>
+<input type="file" id="pdfFile" accept=".pdf">
+
+<label>Guest Name</label>
+<input type="text" id="textInput" placeholder="Enter guest name">
+
+<label>Font Size</label>
+<input type="number" id="fontSize" value="12">
+
+<label>Image Quality</label>
+<select id="quality">
+    <option value="2" selected>HD</option>
+    <option value="4">4K</option>
+</select>
+
+<button onclick="modifyPdfAndDownloadJPG()">Download JPG</button>
+</div>
+
+<script>
+let loadedFont = null;
+let isFontLoaded = false;
+
+// Load font from GitHub
+async function loadFont() {
+    const status = document.getElementById("fontStatus");
+    try {
+        const res = await fetch("Montserrat-Regular.ttf");
+        if (!res.ok) throw new Error("Font not found");
+        loadedFont = await res.arrayBuffer();
+        isFontLoaded = true;
+        status.textContent = "✓ Montserrat font loaded";
+        status.className = "font-status font-success";
+    } catch (e) {
+        status.textContent = "✗ Failed to load Montserrat-Regular.ttf";
+        status.className = "font-status font-error";
+    }
+}
+
+window.onload = loadFont;
+
+async function modifyPdfAndDownloadJPG() {
+    if (!isFontLoaded) {
+        alert("Font not loaded");
+        return;
+    }
+
+    const pdfFile = document.getElementById("pdfFile").files[0];
+    const text = document.getElementById("textInput").value;
+    const fontSize = parseFloat(document.getElementById("fontSize").value);
+    const scale = parseInt(document.getElementById("quality").value);
+
+    if (!pdfFile || !text) {
+        alert("Please upload PDF and enter text");
+        return;
+    }
+
+    // Load PDF
+    const pdfBytes = await pdfFile.arrayBuffer();
+    const { PDFDocument, rgb } = PDFLib;
+
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    pdfDoc.registerFontkit(fontkit);
+    const font = await pdfDoc.embedFont(loadedFont);
+
+    const page = pdfDoc.getPages()[0];
+    page.drawText(text, {
+        x: 84,
+        y: 512,
+        size: fontSize,
+        font,
+        color: rgb(5,0,51)
+    });
+
+    const newPdfBytes = await pdfDoc.save();
+
+    // Render to Canvas (JPG)
+    const loadingTask = pdfjsLib.getDocument({ data: newPdfBytes });
+    const pdf = await loadingTask.promise;
+    const pdfPage = await pdf.getPage(1);
+
+    const viewport = pdfPage.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await pdfPage.render({
+        canvasContext: ctx,
+        viewport
+    }).promise;
+
+ canvas.toBlob(blob => {
+        const link = document.createElement("a");
+        const gtext = document.getElementById("textInput").value;
+        const filename = scale === 4 ? `${gtext}.jpg` : `${gtext}.jpg`;
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+    }, "image/jpeg", 0.95);
+}
+</script>
+
+</body>
+</html>
